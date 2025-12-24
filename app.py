@@ -2,6 +2,7 @@ import streamlit as st
 import random
 import json
 import os
+import base64
 from gtts import gTTS
 from io import BytesIO
 
@@ -189,9 +190,9 @@ def get_valid_question():
     
     return {"word": target_word, "options": options}
 
-# --- AUDIO FUNCTION ---
+# --- ROBUST AUDIO FUNCTION ---
 @st.cache_data(show_spinner=False)
-def get_pronunciation(text_fr):
+def get_pronunciation_bytes(text_fr):
     """Generates audio bytes for the given French text."""
     try:
         tts = gTTS(text=text_fr, lang='fr')
@@ -274,14 +275,24 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    # Audio Display (FIXED: Using unique key to force refresh)
-    audio_data = get_pronunciation(word_fr)
-    if audio_data:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            # The 'key' parameter here is the magic fix. 
-            # It combines the word and the turn number to ensure it's always unique.
-            st.audio(audio_data, format='audio/mp3', key=f"audio_{word_fr}_{st.session_state.turn_count}")
+    # --- HTML AUDIO PLAYER (Crash-Proof & iPad Friendly) ---
+    audio_bytes = get_pronunciation_bytes(word_fr)
+    if audio_bytes:
+        # Convert audio to Base64 so it can be embedded directly in HTML
+        b64 = base64.b64encode(audio_bytes).decode()
+        
+        # We generate a unique ID for the player using the word AND the turn count.
+        # This forces the browser to treat it as a NEW player every time, fixing the "stuck sound" bug.
+        player_id = f"audio-{word_fr}-{st.session_state.turn_count}"
+        
+        md = f"""
+            <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+                <audio controls id="{player_id}">
+                    <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+                </audio>
+            </div>
+            """
+        st.markdown(md, unsafe_allow_html=True)
 
     # --- FEEDBACK STAGE (After clicking answer) ---
     if st.session_state.feedback:
@@ -334,4 +345,4 @@ else:
 
 st.write("---")
 st.caption("Press the 'Play' button ▶️ above to hear the pronunciation.")
-
+    
