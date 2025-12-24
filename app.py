@@ -167,6 +167,7 @@ def save_mastery_data(data):
 def get_valid_question():
     mastery_data = st.session_state.mastery_data
     
+    # Filter words: Must not be mastered AND must not be in current session history
     available_pool = [
         w for w in VOCABULARY 
         if mastery_data.get(w["fr"], 0) < MASTERY_THRESHOLD
@@ -176,17 +177,20 @@ def get_valid_question():
     if not available_pool:
         return None
         
+    # Select Correct Word
     target_word = random.choice(available_pool)
     
+    # Select 3 Distractors (Wrong answers)
     all_english = [w["en"] for w in VOCABULARY if w["en"] != target_word["en"]]
     distractors = random.sample(all_english, 3)
     
+    # Combine and Shuffle
     options = distractors + [target_word["en"]]
     random.shuffle(options)
     
     return {"word": target_word, "options": options}
 
-# --- NEW FUNCTION FOR AUDIO ---
+# --- AUDIO FUNCTION (FIXED) ---
 @st.cache_data(show_spinner=False)
 def get_pronunciation(text_fr):
     """Generates audio bytes for the given French text."""
@@ -194,6 +198,7 @@ def get_pronunciation(text_fr):
         tts = gTTS(text=text_fr, lang='fr')
         fp = BytesIO()
         tts.write_to_fp(fp)
+        fp.seek(0) # <--- THIS WAS THE MISSING LINE
         return fp
     except Exception as e:
         return None
@@ -204,6 +209,7 @@ def get_pronunciation(text_fr):
 
 st.set_page_config(page_title="French Vocab Fun", page_icon="🇫🇷")
 
+# Initialize Session State
 if 'initialized' not in st.session_state:
     st.session_state.initialized = True
     st.session_state.score = 0
@@ -214,6 +220,7 @@ if 'initialized' not in st.session_state:
     st.session_state.feedback = None 
     st.session_state.mastery_data = load_mastery_data()
     
+    # Start first question
     st.session_state.current_q = get_valid_question()
 
 # --- HEADER ---
@@ -232,6 +239,7 @@ if st.session_state.game_over:
     st.write("Words you have mastered (Score 5+) will be removed from future games so you can learn new ones!")
     
     if st.button("Play Again (Start New Game)"):
+        # Reset everything except mastery data
         st.session_state.score = 0
         st.session_state.turn_count = 0
         st.session_state.session_history = []
@@ -249,30 +257,33 @@ elif st.session_state.current_q is None:
         st.rerun()
 
 else:
+    # Progress Bar
     progress = st.session_state.turn_count / MAX_TURNS
     st.progress(progress, text=f"Question {st.session_state.turn_count + 1} of {MAX_TURNS}")
+    
+    # Display Score
     st.write(f"**Current Score:** {st.session_state.score}")
 
+    # Display The Word
     q = st.session_state.current_q
     word_fr = q["word"]["fr"]
     correct_en = q["word"]["en"]
     
-    # --- WORD & AUDIO DISPLAY ---
+    # Word Display
     st.markdown(f"""
     <div style="background-color:#f0f2f6; padding:20px; border-radius:10px; text-align:center; margin-bottom:10px;">
         <h1 style="color:#2c3e50;">{word_fr}</h1>
     </div>
     """, unsafe_allow_html=True)
 
-    # Generate Audio
+    # Audio Display
     audio_bytes = get_pronunciation(word_fr)
     if audio_bytes:
-        # We center the audio player using columns
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.audio(audio_bytes, format='audio/mp3')
 
-    # --- FEEDBACK STAGE ---
+    # --- FEEDBACK STAGE (After clicking answer) ---
     if st.session_state.feedback:
         is_correct, msg = st.session_state.feedback
         
@@ -283,6 +294,7 @@ else:
             st.info(f"The correct answer was: **{correct_en}**")
             
         if st.button("Next Word ➡️"):
+            # Move to next turn
             st.session_state.turn_count += 1
             st.session_state.feedback = None
             
@@ -293,7 +305,7 @@ else:
             
             st.rerun()
 
-    # --- INPUT STAGE ---
+    # --- INPUT STAGE (Waiting for answer) ---
     else:
         st.write("What does this mean in English?")
         
@@ -301,12 +313,14 @@ else:
         for i, option in enumerate(q["options"]):
             with cols[i % 2]:
                 if st.button(option, use_container_width=True):
+                    # Logic when button is clicked
                     
                     st.session_state.session_history.append(word_fr)
                     
                     if option == correct_en:
                         st.session_state.score += 1
                         
+                        # Update Persistent Mastery
                         current_mastery = st.session_state.mastery_data.get(word_fr, 0)
                         new_mastery = current_mastery + 1
                         st.session_state.mastery_data[word_fr] = new_mastery
@@ -320,4 +334,4 @@ else:
 
 st.write("---")
 st.caption("Press the 'Play' button ▶️ above to hear the pronunciation.")
-                        
+    
