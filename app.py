@@ -1,3 +1,4 @@
+
 import streamlit as st
 import random
 import json
@@ -275,24 +276,28 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    # --- HTML AUDIO PLAYER (Crash-Proof & iPad Friendly) ---
+    # --- HTML AUDIO PLAYER (iPad Fix Version) ---
+    # We use a placeholder and .empty() to force the browser to clear the previous player completely
+    audio_placeholder = st.empty()
+    
     audio_bytes = get_pronunciation_bytes(word_fr)
     if audio_bytes:
-        # Convert audio to Base64 so it can be embedded directly in HTML
+        # Convert audio to Base64
         b64 = base64.b64encode(audio_bytes).decode()
         
-        # We generate a unique ID for the player using the word AND the turn count.
-        # This forces the browser to treat it as a NEW player every time, fixing the "stuck sound" bug.
-        player_id = f"audio-{word_fr}-{st.session_state.turn_count}"
+        # Unique ID combining word and turn count
+        player_id = f"audio-{st.session_state.turn_count}-{word_fr}"
         
+        # KEY FIX FOR IPAD:
+        # 1. Use the 'src' attribute directly on the <audio> tag (not <source> inside it).
+        # 2. This forces Safari to reload the source when the string changes.
         md = f"""
             <div style="display: flex; justify-content: center; margin-bottom: 20px;">
-                <audio controls id="{player_id}">
-                    <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
+                <audio controls id="{player_id}" src="data:audio/mp3;base64,{b64}">
                 </audio>
             </div>
             """
-        st.markdown(md, unsafe_allow_html=True)
+        audio_placeholder.markdown(md, unsafe_allow_html=True)
 
     # --- FEEDBACK STAGE (After clicking answer) ---
     if st.session_state.feedback:
@@ -308,6 +313,9 @@ else:
             # Move to next turn
             st.session_state.turn_count += 1
             st.session_state.feedback = None
+            
+            # Clear the audio player immediately so it doesn't linger
+            audio_placeholder.empty()
             
             if st.session_state.turn_count >= MAX_TURNS:
                 st.session_state.game_over = True
