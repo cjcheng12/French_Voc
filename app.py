@@ -3,6 +3,7 @@ import streamlit as st
 import random
 import json
 import os
+import base64  # <--- NEW IMPORT
 from gtts import gTTS
 from io import BytesIO
 
@@ -190,7 +191,7 @@ def get_valid_question():
     
     return {"word": target_word, "options": options}
 
-# --- AUDIO FUNCTION (FIXED) ---
+# --- NEW ROBUST AUDIO FUNCTION ---
 @st.cache_data(show_spinner=False)
 def get_pronunciation(text_fr):
     """Generates audio bytes for the given French text."""
@@ -198,8 +199,7 @@ def get_pronunciation(text_fr):
         tts = gTTS(text=text_fr, lang='fr')
         fp = BytesIO()
         tts.write_to_fp(fp)
-        fp.seek(0) # <--- THIS WAS THE MISSING LINE
-        return fp
+        return fp.getvalue() # Return raw bytes, safest for iPad
     except Exception as e:
         return None
 
@@ -276,12 +276,20 @@ else:
     </div>
     """, unsafe_allow_html=True)
 
-    # Audio Display
-    audio_bytes = get_pronunciation(word_fr)
-    if audio_bytes:
+    # Audio Display (iPad Compatible Version)
+    audio_data = get_pronunciation(word_fr)
+    if audio_data:
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.audio(audio_bytes, format='audio/mp3')
+            # Convert bytes to base64 to embed directly in HTML
+            # This bypasses the Streamlit widget which can fail on iOS
+            b64_audio = base64.b64encode(audio_data).decode()
+            audio_html = f"""
+                <audio controls style="width: 100%;">
+                    <source src="data:audio/mp3;base64,{b64_audio}" type="audio/mp3">
+                </audio>
+            """
+            st.markdown(audio_html, unsafe_allow_html=True)
 
     # --- FEEDBACK STAGE (After clicking answer) ---
     if st.session_state.feedback:
@@ -334,4 +342,3 @@ else:
 
 st.write("---")
 st.caption("Press the 'Play' button ▶️ above to hear the pronunciation.")
-    
